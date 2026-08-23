@@ -175,6 +175,7 @@ const uploadImage = async (req, res) => {
       success: true,
       message: 'Image uploaded successfully',
       url: imageUrl,
+      filePath: imageUrl,
       public_id: publicId || filename
     });
   } catch (error) {
