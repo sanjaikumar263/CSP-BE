@@ -10,10 +10,14 @@ const userSchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      required: [true, 'Email is required'],
-      unique: true,
       lowercase: true,
-      trim: true
+      trim: true,
+      sparse: true
+    },
+    mobile: {
+      type: String,
+      trim: true,
+      default: ''
     },
     password: {
       type: String,
@@ -22,8 +26,8 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'staff'],
-      default: 'admin'
+      enum: ['admin', 'staff', 'customer'],
+      default: 'customer'
     }
   },
   {
