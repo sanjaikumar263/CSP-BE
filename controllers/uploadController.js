@@ -1,11 +1,22 @@
 const path = require('path');
 const fs = require('fs');
+const sharp = require('sharp');
 
 // Ensure local uploads directory exists
 const uploadsDir = path.join(__dirname, '../public/uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+
+// Helper to format file sizes nicely (bytes -> KB/MB)
+const formatBytes = (bytes, decimals = 1) => {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+};
 
 // Helper to extract clean filename from URL, relative path, or filename
 const extractFilename = (target) => {
@@ -41,50 +52,104 @@ const deleteLocalFile = (filenameOrPath) => {
   return false;
 };
 
-// @desc    Upload image to local server storage
+// Core Image Compression Pipeline using Sharp
+const compressAndSaveImage = async (fileBuffer, originalFilename = '') => {
+  const originalSize = fileBuffer.length;
+  
+  // Unique WebP filename
+  const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+  const filename = `prod-${uniqueId}.webp`;
+  const destinationPath = path.join(uploadsDir, filename);
+
+  // Sharp compression pipeline:
+  // 1. rotate() uses EXIF metadata so smartphone photos are properly oriented
+  // 2. resize() restricts maximum width/height to 1600px without upscaling
+  // 3. webp() compresses image with quality 80 and effort 4
+  const compressedBuffer = await sharp(fileBuffer)
+    .rotate()
+    .resize({
+      width: 1600,
+      height: 1600,
+      fit: 'inside',
+      withoutEnlargement: true
+    })
+    .webp({
+      quality: 80,
+      effort: 4
+    })
+    .toBuffer();
+
+  await fs.promises.writeFile(destinationPath, compressedBuffer);
+
+  const compressedSize = compressedBuffer.length;
+  const savedBytes = Math.max(0, originalSize - compressedSize);
+  const compressionRatio = originalSize > 0 
+    ? `${((savedBytes / originalSize) * 100).toFixed(1)}%`
+    : '0%';
+
+  console.log(`📸 Compressed & Stored: ${formatBytes(originalSize)} -> ${formatBytes(compressedSize)} (${compressionRatio} saved) [${filename}]`);
+
+  return {
+    filename,
+    originalSize: formatBytes(originalSize),
+    compressedSize: formatBytes(compressedSize),
+    originalSizeBytes: originalSize,
+    compressedSizeBytes: compressedSize,
+    savedBytes: formatBytes(savedBytes),
+    compressionRatio
+  };
+};
+
+// @desc    Upload image to local server storage with compression
 // @route   POST /api/upload
 // @access  Public / Admin
 const uploadImage = async (req, res) => {
   try {
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({
         success: false,
-        message: 'No file uploaded'
+        message: 'No image file uploaded'
       });
     }
 
-    const filename = req.file.filename;
+    const compressionResult = await compressAndSaveImage(req.file.buffer, req.file.originalname);
+    const filename = compressionResult.filename;
+
     const reqHost = req.get('host') || 'localhost:5000';
     const protocol = req.protocol || 'http';
     const imageUrl = `${protocol}://${reqHost}/uploads/${filename}`;
     const filePath = `/uploads/${filename}`;
 
-    console.log(`✅ Uploaded image locally via Multer: ${imageUrl}`);
-
     return res.status(200).json({
       success: true,
-      message: 'Image uploaded successfully',
+      message: 'Image compressed and stored successfully',
       url: imageUrl,
       filePath: filePath,
       public_id: filename,
-      filename: filename
+      filename: filename,
+      stats: {
+        originalSize: compressionResult.originalSize,
+        compressedSize: compressionResult.compressedSize,
+        compressionRatio: compressionResult.compressionRatio,
+        savedBytes: compressionResult.savedBytes
+      }
     });
   } catch (error) {
-    console.error('Error uploading image:', error);
+    console.error('Error uploading and compressing image:', error);
     return res.status(500).json({
       success: false,
-      message: 'Image upload failed',
+      message: 'Image compression and upload failed',
       error: error.message
     });
   }
 };
 
-// @desc    Edit/Replace image in local server storage
+// @desc    Edit/Replace image in local server storage with compression
 // @route   PUT /api/upload OR PUT /api/upload/*
 // @access  Public / Admin
 const editImage = async (req, res) => {
   try {
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({
         success: false,
         message: 'No new image file uploaded for edit'
@@ -98,13 +163,13 @@ const editImage = async (req, res) => {
       oldTarget = req.params.public_id;
     }
 
-    const filename = req.file.filename;
+    const compressionResult = await compressAndSaveImage(req.file.buffer, req.file.originalname);
+    const filename = compressionResult.filename;
+
     const reqHost = req.get('host') || 'localhost:5000';
     const protocol = req.protocol || 'http';
     const imageUrl = `${protocol}://${reqHost}/uploads/${filename}`;
     const filePath = `/uploads/${filename}`;
-
-    console.log(`✅ Replacement image uploaded locally: ${imageUrl}`);
 
     let oldDeleted = false;
     if (oldTarget) {
@@ -113,19 +178,25 @@ const editImage = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Image edited and replaced successfully',
+      message: 'Image compressed, edited and replaced successfully',
       url: imageUrl,
       filePath: filePath,
       public_id: filename,
       filename: filename,
       old_public_id: oldTarget ? extractFilename(oldTarget) : null,
-      previous_deleted: oldDeleted
+      previous_deleted: oldDeleted,
+      stats: {
+        originalSize: compressionResult.originalSize,
+        compressedSize: compressionResult.compressedSize,
+        compressionRatio: compressionResult.compressionRatio,
+        savedBytes: compressionResult.savedBytes
+      }
     });
   } catch (error) {
-    console.error('Error editing image:', error);
+    console.error('Error editing and compressing image:', error);
     return res.status(500).json({
       success: false,
-      message: 'Image edit failed',
+      message: 'Image edit and compression failed',
       error: error.message
     });
   }
@@ -181,5 +252,6 @@ module.exports = {
   uploadImage,
   editImage,
   deleteImage,
-  extractFilename
+  extractFilename,
+  compressAndSaveImage
 };

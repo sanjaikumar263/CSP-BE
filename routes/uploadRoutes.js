@@ -12,23 +12,14 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer disk storage configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const fileExt = path.extname(file.originalname).toLowerCase() || '.png';
-    const uniqueFilename = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${fileExt}`;
-    cb(null, uniqueFilename);
-  }
-});
+// Multer memory storage configuration (images are held in memory buffer and compressed with sharp before saving)
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 25 * 1024 * 1024 }, // Allow up to 25MB raw image upload
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    if (file.mimetype && file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
       cb(new Error('Only image files are allowed!'), false);
@@ -36,10 +27,10 @@ const upload = multer({
   }
 });
 
-// @route   POST /api/upload - Upload new image to local storage
+// @route   POST /api/upload - Upload new image to local storage with compression
 router.post('/', upload.single('image'), uploadImage);
 
-// @route   PUT /api/upload OR PUT /api/upload/* - Edit / Replace image in local storage
+// @route   PUT /api/upload OR PUT /api/upload/* - Edit / Replace image in local storage with compression
 router.put('/', upload.single('image'), editImage);
 router.put('/*', upload.single('image'), editImage);
 
