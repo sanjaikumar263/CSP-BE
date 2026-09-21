@@ -1,5 +1,40 @@
 const Product = require('../models/Product');
 
+// Helper to determine active base URL
+const getBaseUrl = (req) => {
+  if (process.env.BASE_URL) {
+    return process.env.BASE_URL.replace(/\/+$/, '');
+  }
+  const protocol = req.protocol || 'http';
+  const host = req.get('host') || 'localhost:5000';
+  return `${protocol}://${host}`;
+};
+
+// Helper to normalize image URLs for client consumption
+const normalizeImageUrl = (url, baseUrl) => {
+  if (!url || typeof url !== 'string') return url;
+  if (url.startsWith('http://localhost:5000/uploads/')) {
+    return url.replace('http://localhost:5000', baseUrl);
+  }
+  if (url.startsWith('/uploads/')) {
+    return `${baseUrl}${url}`;
+  }
+  return url;
+};
+
+// Normalize single product
+const normalizeProduct = (product, baseUrl) => {
+  if (!product) return product;
+  const p = product.toObject ? product.toObject() : { ...product };
+  if (p.image) {
+    p.image = normalizeImageUrl(p.image, baseUrl);
+  }
+  if (Array.isArray(p.images)) {
+    p.images = p.images.map(img => normalizeImageUrl(img, baseUrl));
+  }
+  return p;
+};
+
 // @desc    Create a new product
 // @route   POST /api/products
 // @access  Public / Admin
@@ -61,11 +96,12 @@ const createProduct = async (req, res) => {
     });
 
     const createdProduct = await product.save();
+    const baseUrl = getBaseUrl(req);
 
     return res.status(201).json({
       success: true,
       message: 'Product created successfully',
-      data: createdProduct
+      data: normalizeProduct(createdProduct, baseUrl)
     });
   } catch (error) {
     console.error('Error creating product:', error);
@@ -152,11 +188,12 @@ const getProducts = async (req, res) => {
     }
 
     const products = await Product.find(query).sort(sortOptions);
+    const baseUrl = getBaseUrl(req);
 
     return res.status(200).json({
       success: true,
       count: products.length,
-      data: products
+      data: products.map(p => normalizeProduct(p, baseUrl))
     });
   } catch (error) {
     console.error('Error fetching products:', error);
@@ -182,9 +219,11 @@ const getProductById = async (req, res) => {
       });
     }
 
+    const baseUrl = getBaseUrl(req);
+
     return res.status(200).json({
       success: true,
-      data: product
+      data: normalizeProduct(product, baseUrl)
     });
   } catch (error) {
     console.error('Error fetching product by ID:', error);
@@ -214,10 +253,12 @@ const updateProduct = async (req, res) => {
       });
     }
 
+    const baseUrl = getBaseUrl(req);
+
     return res.status(200).json({
       success: true,
       message: 'Product updated successfully',
-      data: updatedProduct
+      data: normalizeProduct(updatedProduct, baseUrl)
     });
   } catch (error) {
     console.error('Error updating product:', error);
@@ -298,11 +339,13 @@ const getLatestProducts = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(limit);
 
+    const baseUrl = getBaseUrl(req);
+
     return res.status(200).json({
       success: true,
       count: products.length,
       limit,
-      data: products
+      data: products.map(p => normalizeProduct(p, baseUrl))
     });
   } catch (error) {
     console.error('Error fetching latest products:', error);

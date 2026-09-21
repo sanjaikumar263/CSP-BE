@@ -1,4 +1,5 @@
 const StoreInfo = require('../models/StoreInfo');
+const { getBaseUrl, normalizeImageUrl } = require('../utils/urlHelper');
 
 // @desc    Get store info & about us content
 // @route   GET /api/store-info
@@ -9,9 +10,15 @@ const getStoreInfo = async (req, res) => {
     if (!storeInfo) {
       storeInfo = await StoreInfo.create({});
     }
+    const baseUrl = getBaseUrl(req);
+    const item = storeInfo.toObject ? storeInfo.toObject() : { ...storeInfo };
+    if (item.directorImage) {
+      item.directorImage = normalizeImageUrl(item.directorImage, baseUrl);
+    }
+
     res.status(200).json({
       success: true,
-      data: storeInfo
+      data: item
     });
   } catch (error) {
     console.error('Error fetching store info:', error);

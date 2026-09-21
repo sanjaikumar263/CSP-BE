@@ -115,8 +115,14 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-// Pre-save hook to ensure image array and main image are synced
+// Pre-save hook to ensure image array and main image are synced and clean of localhost:5000
 productSchema.pre('save', function (next) {
+  if (this.image && typeof this.image === 'string' && this.image.startsWith('http://localhost:5000/uploads/')) {
+    this.image = this.image.replace('http://localhost:5000', '');
+  }
+  if (Array.isArray(this.images)) {
+    this.images = this.images.map(img => (typeof img === 'string' && img.startsWith('http://localhost:5000/uploads/') ? img.replace('http://localhost:5000', '') : img));
+  }
   if (this.images && this.images.length > 0 && !this.image) {
     this.image = this.images[0];
   } else if (this.image && (!this.images || this.images.length === 0)) {

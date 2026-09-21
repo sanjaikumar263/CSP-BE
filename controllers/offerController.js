@@ -1,4 +1,5 @@
 const Offer = require('../models/Offer');
+const { getBaseUrl, normalizeImageUrl, cleanStoredImageUrl } = require('../utils/urlHelper');
 
 // @desc    Get all active public offers for storefront
 // @route   GET /api/offers
@@ -6,10 +7,17 @@ const Offer = require('../models/Offer');
 const getPublicOffers = async (req, res) => {
   try {
     const offers = await Offer.find({ isActive: true }).sort({ order: 1, createdAt: -1 });
+    const baseUrl = getBaseUrl(req);
+    const normalizedOffers = offers.map(o => {
+      const item = o.toObject ? o.toObject() : { ...o };
+      if (item.image) item.image = normalizeImageUrl(item.image, baseUrl);
+      return item;
+    });
+
     res.status(200).json({
       success: true,
-      count: offers.length,
-      data: offers
+      count: normalizedOffers.length,
+      data: normalizedOffers
     });
   } catch (error) {
     console.error('Error fetching public offers:', error);
@@ -26,10 +34,17 @@ const getPublicOffers = async (req, res) => {
 const getAllOffersAdmin = async (req, res) => {
   try {
     const offers = await Offer.find({}).sort({ order: 1, createdAt: -1 });
+    const baseUrl = getBaseUrl(req);
+    const normalizedOffers = offers.map(o => {
+      const item = o.toObject ? o.toObject() : { ...o };
+      if (item.image) item.image = normalizeImageUrl(item.image, baseUrl);
+      return item;
+    });
+
     res.status(200).json({
       success: true,
-      count: offers.length,
-      data: offers
+      count: normalizedOffers.length,
+      data: normalizedOffers
     });
   } catch (error) {
     console.error('Error fetching admin offers:', error);

@@ -21,10 +21,13 @@ dotenv.config();
 // Initialize Express App
 const app = express();
 
+// Trust reverse proxy (Render, Heroku, etc.) for correct protocol (https) and host detection
+app.set('trust proxy', 1);
+
 // Default seed banners data
 const defaultBanners = [
   {
-    eyebrow: 'AUTUMN WEAVES · 2026',
+    eyebrow: 'AUTUMN WEAVES â€¢ 2026',
     title: 'Timeless Silks.',
     titleHighlight: 'Tradition in Every Weave.',
     subtitle: 'Discover our exquisite collection of pure silk sarees and traditional wear handcrafted by master artisans.',
@@ -35,7 +38,7 @@ const defaultBanners = [
     order: 0
   },
   {
-    eyebrow: 'BRIDAL SPECIAL · 2026',
+    eyebrow: 'BRIDAL SPECIAL â€¢ 2026',
     title: 'Royal Elegance.',
     titleHighlight: 'Crafted For Special Moments.',
     subtitle: 'Explore opulent bridal Kanchipuram silks adorned with authentic pure gold zari craftsmanship.',

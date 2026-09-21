@@ -1,4 +1,5 @@
 const Banner = require('../models/Banner');
+const { getBaseUrl, normalizeImageUrl, cleanStoredImageUrl } = require('../utils/urlHelper');
 
 // @desc    Get active public banners for homepage
 // @route   GET /api/banners
@@ -6,10 +7,17 @@ const Banner = require('../models/Banner');
 const getPublicBanners = async (req, res) => {
   try {
     const banners = await Banner.find({ isActive: true }).sort({ order: 1, createdAt: -1 });
+    const baseUrl = getBaseUrl(req);
+    const normalizedBanners = banners.map(b => {
+      const item = b.toObject ? b.toObject() : { ...b };
+      if (item.image) item.image = normalizeImageUrl(item.image, baseUrl);
+      return item;
+    });
+
     return res.status(200).json({
       success: true,
-      count: banners.length,
-      data: banners
+      count: normalizedBanners.length,
+      data: normalizedBanners
     });
   } catch (error) {
     console.error('Error fetching public banners:', error);
@@ -27,10 +35,17 @@ const getPublicBanners = async (req, res) => {
 const getAllBannersAdmin = async (req, res) => {
   try {
     const banners = await Banner.find({}).sort({ order: 1, createdAt: -1 });
+    const baseUrl = getBaseUrl(req);
+    const normalizedBanners = banners.map(b => {
+      const item = b.toObject ? b.toObject() : { ...b };
+      if (item.image) item.image = normalizeImageUrl(item.image, baseUrl);
+      return item;
+    });
+
     return res.status(200).json({
       success: true,
-      count: banners.length,
-      data: banners
+      count: normalizedBanners.length,
+      data: normalizedBanners
     });
   } catch (error) {
     console.error('Error fetching admin banners:', error);

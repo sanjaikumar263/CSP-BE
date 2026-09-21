@@ -8,6 +8,16 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Helper to get base URL for uploads
+const getBaseUrl = (req) => {
+  if (process.env.BASE_URL) {
+    return process.env.BASE_URL.replace(/\/+$/, '');
+  }
+  const protocol = req.protocol || 'http';
+  const host = req.get('host') || 'localhost:5000';
+  return `${protocol}://${host}`;
+};
+
 // Helper to format file sizes nicely (bytes -> KB/MB)
 const formatBytes = (bytes, decimals = 1) => {
   if (!bytes || bytes === 0) return '0 B';
@@ -115,9 +125,8 @@ const uploadImage = async (req, res) => {
     const compressionResult = await compressAndSaveImage(req.file.buffer, req.file.originalname);
     const filename = compressionResult.filename;
 
-    const reqHost = req.get('host') || 'localhost:5000';
-    const protocol = req.protocol || 'http';
-    const imageUrl = `${protocol}://${reqHost}/uploads/${filename}`;
+    const baseUrl = getBaseUrl(req);
+    const imageUrl = `${baseUrl}/uploads/${filename}`;
     const filePath = `/uploads/${filename}`;
 
     return res.status(200).json({
@@ -166,9 +175,8 @@ const editImage = async (req, res) => {
     const compressionResult = await compressAndSaveImage(req.file.buffer, req.file.originalname);
     const filename = compressionResult.filename;
 
-    const reqHost = req.get('host') || 'localhost:5000';
-    const protocol = req.protocol || 'http';
-    const imageUrl = `${protocol}://${reqHost}/uploads/${filename}`;
+    const baseUrl = getBaseUrl(req);
+    const imageUrl = `${baseUrl}/uploads/${filename}`;
     const filePath = `/uploads/${filename}`;
 
     let oldDeleted = false;
