@@ -1,38 +1,15 @@
 const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
-const cloudinary = require('cloudinary').v2;
+const Image = require('../models/Image');
 
-// Check if Cloudinary credentials are fully provided
-const isCloudinaryConfigured = () => {
-  return Boolean(
-    process.env.CLOUDINARY_CLOUD_NAME &&
-    process.env.CLOUDINARY_API_KEY &&
-    process.env.CLOUDINARY_API_SECRET
-  );
-};
-
-// Initialize Cloudinary if credentials are present
-const initCloudinary = () => {
-  if (isCloudinaryConfigured()) {
-    cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME.trim(),
-      api_key: process.env.CLOUDINARY_API_KEY.trim(),
-      api_secret: process.env.CLOUDINARY_API_SECRET.trim()
-    });
-    return true;
-  }
-  return false;
-};
-initCloudinary();
-
-// Ensure local uploads directory exists (for fallback or local development)
+// Ensure local uploads cache directory exists
 const uploadsDir = path.join(__dirname, '../public/uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Helper to get base URL for local uploads fallback
+// Helper to get base URL for uploads
 const getBaseUrl = (req) => {
   if (process.env.BASE_URL) {
     return process.env.BASE_URL.replace(/\/+$/, '');
@@ -52,7 +29,7 @@ const formatBytes = (bytes, decimals = 1) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
-// Helper to extract clean filename from local URL, relative path, or filename
+// Helper to extract clean filename from URL, relative path, or filename
 const extractFilename = (target) => {
   if (!target || typeof target !== 'string') return '';
   let str = target.trim();
@@ -65,32 +42,7 @@ const extractFilename = (target) => {
   return path.basename(str);
 };
 
-// Helper to extract Cloudinary public ID from URL or public_id string
-const extractCloudinaryPublicId = (target) => {
-  if (!target || typeof target !== 'string') return '';
-  const trimmed = target.trim();
-
-  // If it's a URL
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    // Matches: /image/upload/(v<version>/)?(clothing-shop/sample_id).webp
-    const match = trimmed.match(/\/image\/upload\/(?:v\d+\/)?(.+?)(?:\.[a-zA-Z0-9]+)?(?:\?.*)?$/);
-    if (match && match[1]) {
-      return match[1];
-    }
-  }
-
-  // If it's already a public_id with or without folder
-  // Remove file extension if present (e.g. clothing-shop/img.webp -> clothing-shop/img)
-  return trimmed.replace(/\.[^/.]+$/, '');
-};
-
-// Helper to check if string looks like a Cloudinary URL or ID
-const isCloudinaryTarget = (target) => {
-  if (!target || typeof target !== 'string') return false;
-  return target.includes('cloudinary.com') || target.includes('clothing-shop/');
-};
-
-// Helper to delete local file from public/uploads
+// Helper to delete local cache file from public/uploads
 const deleteLocalFile = (filenameOrPath) => {
   if (!filenameOrPath) return false;
   const basename = extractFilename(filenameOrPath);
@@ -100,30 +52,14 @@ const deleteLocalFile = (filenameOrPath) => {
   if (fs.existsSync(localFilePath)) {
     try {
       fs.unlinkSync(localFilePath);
-      console.log(`📁 Deleted local image: ${localFilePath}`);
+      console.log(`📁 Deleted local cache image: ${localFilePath}`);
       return true;
     } catch (err) {
-      console.error(`Failed to delete local image ${localFilePath}:`, err.message);
+      console.error(`Failed to delete local cache image ${localFilePath}:`, err.message);
       return false;
     }
   }
   return false;
-};
-
-// Helper to delete image from Cloudinary
-const deleteCloudinaryImage = async (target) => {
-  const publicId = extractCloudinaryPublicId(target);
-  if (!publicId) return false;
-
-  try {
-    initCloudinary();
-    const result = await cloudinary.uploader.destroy(publicId);
-    console.log(`☁️ Cloudinary destroy [${publicId}]:`, result);
-    return result.result === 'ok' || result.result === 'not found';
-  } catch (err) {
-    console.error(`Failed to destroy Cloudinary image (${publicId}):`, err.message);
-    return false;
-  }
 };
 
 // Core Image Compression Pipeline using Sharp
@@ -143,34 +79,37 @@ const compressImageBuffer = async (fileBuffer) => {
     .toBuffer();
 };
 
-// Stream buffer upload to Cloudinary
-const uploadToCloudinary = (compressedBuffer) => {
-  return new Promise((resolve, reject) => {
-    initCloudinary();
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'clothing-shop',
-        resource_type: 'image',
-        format: 'webp'
-      },
-      (error, result) => {
-        if (error) return reject(error);
-        resolve(result);
-      }
-    );
-    uploadStream.end(compressedBuffer);
-  });
+// Save compressed buffer to both MongoDB (permanent) and local disk (fast cache)
+const saveImagePermanently = async (compressedBuffer, filename) => {
+  // 1. Save permanently to MongoDB
+  await Image.findOneAndUpdate(
+    { filename },
+    {
+      filename,
+      contentType: 'image/webp',
+      data: compressedBuffer,
+      size: compressedBuffer.length
+    },
+    { upsert: true, new: true }
+  );
+
+  // 2. Write to local disk cache
+  const localFilePath = path.join(uploadsDir, filename);
+  try {
+    await fs.promises.writeFile(localFilePath, compressedBuffer);
+  } catch (fsErr) {
+    console.warn(`Local disk cache write failed (safe to ignore on serverless): ${fsErr.message}`);
+  }
 };
 
-// Local storage fallback for saving compressed image
+// Backward-compatible helper
 const compressAndSaveImage = async (fileBuffer, originalFilename = '') => {
   const originalSize = fileBuffer.length;
   const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
   const filename = `prod-${uniqueId}.webp`;
-  const destinationPath = path.join(uploadsDir, filename);
 
   const compressedBuffer = await compressImageBuffer(fileBuffer);
-  await fs.promises.writeFile(destinationPath, compressedBuffer);
+  await saveImagePermanently(compressedBuffer, filename);
 
   const compressedSize = compressedBuffer.length;
   const savedBytes = Math.max(0, originalSize - compressedSize);
@@ -178,7 +117,7 @@ const compressAndSaveImage = async (fileBuffer, originalFilename = '') => {
     ? `${((savedBytes / originalSize) * 100).toFixed(1)}%`
     : '0%';
 
-  console.log(`📸 Compressed & Stored locally: ${formatBytes(originalSize)} -> ${formatBytes(compressedSize)} (${compressionRatio} saved) [${filename}]`);
+  console.log(`📸 Compressed & Stored in MongoDB: ${formatBytes(originalSize)} -> ${formatBytes(compressedSize)} (${compressionRatio} saved) [${filename}]`);
 
   return {
     filename,
@@ -191,7 +130,7 @@ const compressAndSaveImage = async (fileBuffer, originalFilename = '') => {
   };
 };
 
-// @desc    Upload image to Cloudinary (with Sharp compression) or local fallback
+// @desc    Upload image to MongoDB Atlas with compression
 // @route   POST /api/upload
 // @access  Public / Admin
 const uploadImage = async (req, res) => {
@@ -204,71 +143,52 @@ const uploadImage = async (req, res) => {
     }
 
     const originalSize = req.file.buffer.length;
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const filename = `prod-${uniqueId}.webp`;
+
+    // 1. Compress with Sharp
     const compressedBuffer = await compressImageBuffer(req.file.buffer);
+
+    // 2. Save permanently to MongoDB Atlas & local cache
+    await saveImagePermanently(compressedBuffer, filename);
+
     const compressedSize = compressedBuffer.length;
     const savedBytes = Math.max(0, originalSize - compressedSize);
     const compressionRatio = originalSize > 0 
       ? `${((savedBytes / originalSize) * 100).toFixed(1)}%`
       : '0%';
 
-    const stats = {
-      originalSize: formatBytes(originalSize),
-      compressedSize: formatBytes(compressedSize),
-      originalSizeBytes: originalSize,
-      compressedSizeBytes: compressedSize,
-      savedBytes: formatBytes(savedBytes),
-      compressionRatio
-    };
-
-    // 1. Cloudinary Storage (Primary for Render / Production)
-    if (isCloudinaryConfigured()) {
-      const cloudinaryResult = await uploadToCloudinary(compressedBuffer);
-      console.log(`☁️ Cloudinary upload successful: ${cloudinaryResult.secure_url} [${cloudinaryResult.public_id}]`);
-
-      return res.status(200).json({
-        success: true,
-        message: 'Image compressed and stored in Cloudinary',
-        url: cloudinaryResult.secure_url,
-        filePath: cloudinaryResult.secure_url,
-        public_id: cloudinaryResult.public_id,
-        filename: cloudinaryResult.public_id,
-        provider: 'cloudinary',
-        stats
-      });
-    }
-
-    // 2. Local Storage Fallback (Warning logged for ephemeral environments)
-    console.warn('⚠️ Cloudinary not configured in .env. Saving image to local disk (note: files on Render free tier will be wiped upon restart).');
-    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    const filename = `prod-${uniqueId}.webp`;
-    const destinationPath = path.join(uploadsDir, filename);
-    await fs.promises.writeFile(destinationPath, compressedBuffer);
-
     const baseUrl = getBaseUrl(req);
     const imageUrl = `${baseUrl}/uploads/${filename}`;
     const filePath = `/uploads/${filename}`;
 
+    console.log(`💾 Image saved to MongoDB: ${filename} (${formatBytes(compressedSize)})`);
+
     return res.status(200).json({
       success: true,
-      message: 'Image compressed and stored in local storage (Cloudinary not configured)',
+      message: 'Image compressed and stored permanently in database',
       url: imageUrl,
       filePath: filePath,
       public_id: filename,
       filename: filename,
-      provider: 'local',
-      stats
+      stats: {
+        originalSize: formatBytes(originalSize),
+        compressedSize: formatBytes(compressedSize),
+        compressionRatio,
+        savedBytes: formatBytes(savedBytes)
+      }
     });
   } catch (error) {
-    console.error('Error uploading and compressing image:', error);
+    console.error('Error uploading and storing image:', error);
     return res.status(500).json({
       success: false,
-      message: 'Image compression and upload failed',
+      message: 'Image upload and database storage failed',
       error: error.message
     });
   }
 };
 
-// @desc    Edit/Replace image in Cloudinary or local storage with compression
+// @desc    Edit/Replace image in MongoDB storage with compression
 // @route   PUT /api/upload OR PUT /api/upload/*
 // @access  Public / Admin
 const editImage = async (req, res) => {
@@ -288,89 +208,66 @@ const editImage = async (req, res) => {
     }
 
     const originalSize = req.file.buffer.length;
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const filename = `prod-${uniqueId}.webp`;
+
+    // 1. Compress with Sharp
     const compressedBuffer = await compressImageBuffer(req.file.buffer);
+
+    // 2. Save new image to MongoDB & local cache
+    await saveImagePermanently(compressedBuffer, filename);
+
+    // 3. Delete old image from MongoDB and local cache
+    let oldDeleted = false;
+    if (oldTarget) {
+      const oldFilename = extractFilename(oldTarget);
+      if (oldFilename) {
+        const dbDel = await Image.deleteOne({ filename: oldFilename });
+        const localDel = deleteLocalFile(oldFilename);
+        oldDeleted = dbDel.deletedCount > 0 || localDel;
+        if (oldDeleted) {
+          console.log(`🗑️ Replaced & deleted old image from MongoDB: ${oldFilename}`);
+        }
+      }
+    }
+
     const compressedSize = compressedBuffer.length;
     const savedBytes = Math.max(0, originalSize - compressedSize);
     const compressionRatio = originalSize > 0 
       ? `${((savedBytes / originalSize) * 100).toFixed(1)}%`
       : '0%';
 
-    const stats = {
-      originalSize: formatBytes(originalSize),
-      compressedSize: formatBytes(compressedSize),
-      originalSizeBytes: originalSize,
-      compressedSizeBytes: compressedSize,
-      savedBytes: formatBytes(savedBytes),
-      compressionRatio
-    };
-
-    // 1. Cloudinary Storage
-    if (isCloudinaryConfigured()) {
-      const cloudinaryResult = await uploadToCloudinary(compressedBuffer);
-
-      // Clean up previous image if old target was provided
-      let previousDeleted = false;
-      if (oldTarget) {
-        if (isCloudinaryTarget(oldTarget)) {
-          previousDeleted = await deleteCloudinaryImage(oldTarget);
-        } else {
-          // If previous image was local (legacy), clean it up locally
-          previousDeleted = deleteLocalFile(oldTarget);
-        }
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Image compressed, edited and uploaded to Cloudinary',
-        url: cloudinaryResult.secure_url,
-        filePath: cloudinaryResult.secure_url,
-        public_id: cloudinaryResult.public_id,
-        filename: cloudinaryResult.public_id,
-        old_public_id: oldTarget || null,
-        previous_deleted: previousDeleted,
-        provider: 'cloudinary',
-        stats
-      });
-    }
-
-    // 2. Local Storage Fallback
-    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    const filename = `prod-${uniqueId}.webp`;
-    const destinationPath = path.join(uploadsDir, filename);
-    await fs.promises.writeFile(destinationPath, compressedBuffer);
-
     const baseUrl = getBaseUrl(req);
     const imageUrl = `${baseUrl}/uploads/${filename}`;
     const filePath = `/uploads/${filename}`;
 
-    let oldDeleted = false;
-    if (oldTarget) {
-      oldDeleted = deleteLocalFile(oldTarget);
-    }
-
     return res.status(200).json({
       success: true,
-      message: 'Image compressed, edited and replaced in local storage',
+      message: 'Image compressed, edited and stored permanently in database',
       url: imageUrl,
       filePath: filePath,
       public_id: filename,
       filename: filename,
       old_public_id: oldTarget ? extractFilename(oldTarget) : null,
       previous_deleted: oldDeleted,
-      provider: 'local',
-      stats
+      stats: {
+        originalSize: formatBytes(originalSize),
+        compressedSize: formatBytes(compressedSize),
+        compressionRatio,
+        savedBytes: formatBytes(savedBytes)
+      }
     });
   } catch (error) {
-    console.error('Error editing and compressing image:', error);
+    console.error('Error editing and replacing image:', error);
     return res.status(500).json({
       success: false,
-      message: 'Image edit and compression failed',
+      message: 'Image edit and replacement failed',
       error: error.message
     });
   }
 };
 
-// @desc    Delete image from Cloudinary or local storage
+// @desc    Delete image from MongoDB storage and local cache
 // @route   DELETE /api/upload OR DELETE /api/upload/*
 // @access  Public / Admin
 const deleteImage = async (req, res) => {
@@ -390,37 +287,34 @@ const deleteImage = async (req, res) => {
       });
     }
 
-    let deleted = false;
-    let provider = 'unknown';
-
-    // 1. Try Cloudinary if target is Cloudinary or if Cloudinary is configured
-    if (isCloudinaryTarget(target) || isCloudinaryConfigured()) {
-      deleted = await deleteCloudinaryImage(target);
-      if (deleted) {
-        provider = 'cloudinary';
-      }
-    }
-
-    // 2. If not deleted from Cloudinary, try deleting from local disk (legacy files)
-    if (!deleted) {
-      deleted = deleteLocalFile(target);
-      if (deleted) {
-        provider = 'local';
-      }
-    }
-
-    if (!deleted) {
-      return res.status(404).json({
+    const filename = extractFilename(target);
+    if (!filename) {
+      return res.status(400).json({
         success: false,
-        message: `Image '${target}' not found or already deleted`
+        message: 'Invalid image identifier'
       });
     }
 
+    // 1. Delete from MongoDB
+    const dbResult = await Image.deleteOne({ filename });
+
+    // 2. Delete from local cache
+    const localDeleted = deleteLocalFile(filename);
+
+    if (dbResult.deletedCount === 0 && !localDeleted) {
+      return res.status(404).json({
+        success: false,
+        message: `Image '${filename}' not found in database or local storage`
+      });
+    }
+
+    console.log(`🗑️ Deleted image from database & cache: ${filename}`);
+
     return res.status(200).json({
       success: true,
-      message: `Image deleted successfully from ${provider} storage`,
-      public_id: target,
-      provider
+      message: 'Image deleted successfully from database storage',
+      public_id: filename,
+      filename: filename
     });
   } catch (error) {
     console.error('Error deleting image:', error);
@@ -432,13 +326,61 @@ const deleteImage = async (req, res) => {
   }
 };
 
+// @desc    Serve image from local disk cache or retrieve from MongoDB if wiped (fixes Render 404)
+// @route   GET /uploads/:filename
+// @access  Public
+const serveImage = async (req, res) => {
+  try {
+    const filename = extractFilename(req.params.filename || req.params[0] || req.path);
+    if (!filename) {
+      return res.status(400).send('Invalid image request');
+    }
+
+    const localFilePath = path.join(uploadsDir, filename);
+
+    // 1. If file exists in local cache, stream it directly
+    if (fs.existsSync(localFilePath)) {
+      return res.sendFile(localFilePath, {
+        headers: {
+          'Cache-Control': 'public, max-age=31536000, immutable'
+        }
+      });
+    }
+
+    // 2. If missing on disk (Render restarted or container wiped), fetch from MongoDB Atlas!
+    const imageDoc = await Image.findOne({ filename });
+    if (!imageDoc || !imageDoc.data) {
+      return res.status(404).send('Image Not Found');
+    }
+
+    // 3. Write back to local cache asynchronously so subsequent requests are instant
+    fs.writeFile(localFilePath, imageDoc.data, (writeErr) => {
+      if (writeErr) {
+        // Non-fatal if local disk is read-only
+      }
+    });
+
+    // 4. Send image buffer with proper headers
+    res.set({
+      'Content-Type': imageDoc.contentType || 'image/webp',
+      'Content-Length': imageDoc.data.length,
+      'Cache-Control': 'public, max-age=31536000, immutable'
+    });
+
+    return res.send(imageDoc.data);
+  } catch (error) {
+    console.error(`Error serving image '${req.params.filename}':`, error);
+    return res.status(500).send('Error serving image');
+  }
+};
+
 module.exports = {
   uploadImage,
   editImage,
   deleteImage,
+  serveImage,
   extractFilename,
-  extractCloudinaryPublicId,
   compressAndSaveImage,
   compressImageBuffer,
-  isCloudinaryConfigured
+  saveImagePermanently
 };
