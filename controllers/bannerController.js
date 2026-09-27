@@ -11,6 +11,7 @@ const getPublicBanners = async (req, res) => {
     const normalizedBanners = banners.map(b => {
       const item = b.toObject ? b.toObject() : { ...b };
       if (item.image) item.image = normalizeImageUrl(item.image, baseUrl);
+      if (item.mobileImage) item.mobileImage = normalizeImageUrl(item.mobileImage, baseUrl);
       return item;
     });
 
@@ -39,6 +40,7 @@ const getAllBannersAdmin = async (req, res) => {
     const normalizedBanners = banners.map(b => {
       const item = b.toObject ? b.toObject() : { ...b };
       if (item.image) item.image = normalizeImageUrl(item.image, baseUrl);
+      if (item.mobileImage) item.mobileImage = normalizeImageUrl(item.mobileImage, baseUrl);
       return item;
     });
 
@@ -62,23 +64,24 @@ const getAllBannersAdmin = async (req, res) => {
 // @access  Private (Admin)
 const createBanner = async (req, res) => {
   try {
-    const { eyebrow, title, titleHighlight, subtitle, image, ctaText, ctaLink, isActive, order } = req.body;
+    const { eyebrow, title, titleHighlight, subtitle, image, mobileImage, ctaText, ctaLink, isActive, order } = req.body;
 
-    if (!title || !image) {
+    if (!image) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide at least a title and an image URL'
+        message: 'Please provide at least a banner image URL'
       });
     }
 
     const banner = await Banner.create({
-      eyebrow: eyebrow || 'AUTUMN WEAVES · 2026',
-      title,
+      eyebrow: eyebrow || '',
+      title: title || '',
       titleHighlight: titleHighlight || '',
       subtitle: subtitle || '',
       image,
-      ctaText: ctaText || 'SHOP NOW',
-      ctaLink: ctaLink || '#trending',
+      mobileImage: mobileImage || '',
+      ctaText: ctaText || '',
+      ctaLink: ctaLink || '/products',
       isActive: isActive !== undefined ? isActive : true,
       order: order !== undefined ? Number(order) : 0
     });

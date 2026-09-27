@@ -12,6 +12,40 @@ const getStoreInfo = async (req, res) => {
     }
     const baseUrl = getBaseUrl(req);
     const item = storeInfo.toObject ? storeInfo.toObject() : { ...storeInfo };
+
+    // Normalize images in customSections
+    if (Array.isArray(item.customSections) && item.customSections.length > 0) {
+      item.customSections = item.customSections.map(sec => ({
+        ...sec,
+        cards: Array.isArray(sec.cards)
+          ? sec.cards.map(card => ({
+              ...card,
+              image: card.image ? normalizeImageUrl(card.image, baseUrl) : ''
+            }))
+          : []
+      }));
+    } else if (Array.isArray(item.achievements) && item.achievements.length > 0) {
+      // Synthesize customSections for backward compatibility if empty
+      item.customSections = [
+        {
+          eyebrow: item.achievementsEyebrow || 'OUR LEADERSHIP & FAMILY',
+          title: item.achievementsHeading || 'Behind the Legacy of Chennai Silk Palace',
+          subtitle: item.achievementsSubtitle || 'Guided by Mr. Thanasekaran Vellaikkoothan, our dedicated team upholds decades of commitment to excellence and authentic craftsmanship.',
+          cards: item.achievements.map(ach => ({
+            ...ach,
+            image: ach.image ? normalizeImageUrl(ach.image, baseUrl) : ''
+          }))
+        }
+      ];
+    }
+
+    if (Array.isArray(item.achievements)) {
+      item.achievements = item.achievements.map(ach => ({
+        ...ach,
+        image: ach.image ? normalizeImageUrl(ach.image, baseUrl) : ''
+      }));
+    }
+
     if (item.directorImage) {
       item.directorImage = normalizeImageUrl(item.directorImage, baseUrl);
     }

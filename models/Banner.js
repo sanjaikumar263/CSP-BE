@@ -4,12 +4,12 @@ const bannerSchema = new mongoose.Schema(
   {
     eyebrow: {
       type: String,
-      default: 'AUTUMN WEAVES · 2026',
+      default: '',
       trim: true
     },
     title: {
       type: String,
-      required: [true, 'Banner title is required'],
+      default: '',
       trim: true
     },
     titleHighlight: {
@@ -24,16 +24,22 @@ const bannerSchema = new mongoose.Schema(
     },
     image: {
       type: String,
-      required: [true, 'Banner image URL is required']
+      required: [true, 'Banner image URL is required'],
+      trim: true
+    },
+    mobileImage: {
+      type: String,
+      default: '',
+      trim: true
     },
     ctaText: {
       type: String,
-      default: 'SHOP NOW',
+      default: '',
       trim: true
     },
     ctaLink: {
       type: String,
-      default: '#trending',
+      default: '/products',
       trim: true
     },
     isActive: {

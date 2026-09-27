@@ -304,7 +304,7 @@ const deleteProduct = async (req, res) => {
 // @access  Public
 const getLatestProducts = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit, 10) || 10;
+    const limit = parseInt(req.query.limit, 10) || 6;
     const { category, status, gender } = req.query;
 
     const query = {};

@@ -6,6 +6,27 @@ const timelineItemSchema = new mongoose.Schema({
   description: { type: String, required: true, trim: true }
 });
 
+const customSectionCardSchema = new mongoose.Schema({
+  title: { type: String, required: true, trim: true },
+  description: { type: String, default: '', trim: true },
+  image: { type: String, default: '', trim: true },
+  tag: { type: String, default: '', trim: true }
+});
+
+const customSectionSchema = new mongoose.Schema({
+  eyebrow: { type: String, default: '', trim: true },
+  title: { type: String, required: true, trim: true },
+  subtitle: { type: String, default: '', trim: true },
+  cards: { type: [customSectionCardSchema], default: [] }
+});
+
+const achievementItemSchema = new mongoose.Schema({
+  title: { type: String, required: true, trim: true },
+  description: { type: String, default: '', trim: true },
+  image: { type: String, default: '', trim: true },
+  tag: { type: String, default: '', trim: true }
+});
+
 const storeInfoSchema = new mongoose.Schema(
   {
     // Contact & Address Details
@@ -88,12 +109,12 @@ const storeInfoSchema = new mongoose.Schema(
     },
     directorQuote: {
       type: String,
-      default: 'Behind every great brand is a visionary whose passion transforms dreams into reality. For over four decades, Mr. Thanasekaran Vellaikkoothan has been a respected pioneer in Malaysia’s textile industry, building Chennai Silk Palace into one of the country’s most trusted and admired destinations for authentic Indian textiles and traditional attire.',
+      default: 'Behind every great brand is a visionary whose passion transforms dreams into reality. For over four decades, Mr. Thanasekaran Vellaikkoothan has been a respected pioneer in Malaysiaï¿½s textile industry, building Chennai Silk Palace into one of the countryï¿½s most trusted and admired destinations for authentic Indian textiles and traditional attire.',
       trim: true
     },
     directorBody: {
       type: String,
-      default: 'Driven by a commitment to quality, integrity, authenticity, and exceptional customer service, he has earned the confidence of generations of customers. Today, Chennai Silk Palace is more than a textile retailer — it is a household name synonymous with elegance, heritage, and timeless craftsmanship.',
+      default: 'Driven by a commitment to quality, integrity, authenticity, and exceptional customer service, he has earned the confidence of generations of customers. Today, Chennai Silk Palace is more than a textile retailer ï¿½ it is a household name synonymous with elegance, heritage, and timeless craftsmanship.',
       trim: true
     },
     directorYears: {
@@ -118,8 +139,35 @@ const storeInfoSchema = new mongoose.Schema(
     },
     missionText: {
       type: String,
-      default: 'To be Malaysia’s most trusted destination for premium Indian textiles by offering authentic products, outstanding value, personalised service, and an unforgettable shopping experience, while preserving cultural heritage and making a meaningful contribution to the community.',
+      default: 'To be Malaysiaï¿½s most trusted destination for premium Indian textiles by offering authentic products, outstanding value, personalised service, and an unforgettable shopping experience, while preserving cultural heritage and making a meaningful contribution to the community.',
       trim: true
+    },
+
+        // Multiple Dynamic Custom Showcase Sections (Each with eyebrow, title, subtitle & cards)
+    customSections: {
+      type: [customSectionSchema],
+      default: []
+    },
+
+    // Achievements & Leadership Highlights Section
+    achievementsHeading: {
+      type: String,
+      default: 'Behind the Legacy of Chennai Silk Palace',
+      trim: true
+    },
+    achievementsEyebrow: {
+      type: String,
+      default: 'OUR LEADERSHIP & FAMILY',
+      trim: true
+    },
+    achievementsSubtitle: {
+      type: String,
+      default: 'Guided by Mr. Thanasekaran Vellaikkoothan, our dedicated team upholds decades of commitment to excellence and authentic craftsmanship.',
+      trim: true
+    },
+    achievements: {
+      type: [achievementItemSchema],
+      default: []
     },
 
     // Entrepreneur Journey Timeline Milestones
@@ -129,12 +177,12 @@ const storeInfoSchema = new mongoose.Schema(
         {
           year: '1985',
           title: 'The Early Vision',
-          description: 'Mr. Thanasekaran’s entrepreneurial journey began in 1985 with a clear vision to bring the finest Indian textiles to customers in Malaysia. Travelling extensively between India and Malaysia, he personally sourced premium fabrics from renowned textile manufacturers and established long-lasting relationships built on trust and quality.'
+          description: 'Mr. Thanasekaranï¿½s entrepreneurial journey began in 1985 with a clear vision to bring the finest Indian textiles to customers in Malaysia. Travelling extensively between India and Malaysia, he personally sourced premium fabrics from renowned textile manufacturers and established long-lasting relationships built on trust and quality.'
         },
         {
           year: '1992',
           title: 'Wholesale Operations Established',
-          description: 'In 1992, he officially established his wholesale textile company in Malaysia under his late father’s name. By importing textile products directly from India in large container shipments, he created an efficient and reliable supply network that served retailers nationwide while strengthening Malaysia’s textile industry.'
+          description: 'In 1992, he officially established his wholesale textile company in Malaysia under his late fatherï¿½s name. By importing textile products directly from India in large container shipments, he created an efficient and reliable supply network that served retailers nationwide while strengthening Malaysiaï¿½s textile industry.'
         },
         {
           year: '2004 - 2006',
@@ -144,12 +192,12 @@ const storeInfoSchema = new mongoose.Schema(
         {
           year: '2012',
           title: 'Ipoh Branch Expansion',
-          description: 'The opening of the Ipoh showroom brought Chennai Silk Palace’s signature quality and exceptional service closer to customers in Perak and the northern region.'
+          description: 'The opening of the Ipoh showroom brought Chennai Silk Palaceï¿½s signature quality and exceptional service closer to customers in Perak and the northern region.'
         },
         {
           year: '2013',
           title: 'Penang Branch Expansion',
-          description: 'The Penang showroom further strengthened the brand’s nationwide presence, making premium Indian textiles more accessible while continuing the company’s tradition of excellence.'
+          description: 'The Penang showroom further strengthened the brandï¿½s nationwide presence, making premium Indian textiles more accessible while continuing the companyï¿½s tradition of excellence.'
         }
       ]
     }
