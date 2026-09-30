@@ -80,6 +80,11 @@ const storeInfoSchema = new mongoose.Schema(
       default: '#youtube',
       trim: true
     },
+    tiktok: {
+      type: String,
+      default: 'https://www.tiktok.com/@chennaisilkpalace.klang',
+      trim: true
+    },
 
     // About Us Content
     heroSubtitleTag: {

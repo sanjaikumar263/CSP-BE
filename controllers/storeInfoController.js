@@ -12,6 +12,9 @@ const getStoreInfo = async (req, res) => {
     }
     const baseUrl = getBaseUrl(req);
     const item = storeInfo.toObject ? storeInfo.toObject() : { ...storeInfo };
+    if (!item.tiktok) {
+      item.tiktok = storeInfo.tiktok || 'https://www.tiktok.com/@chennaisilkpalace.klang';
+    }
 
     // Normalize images in customSections
     if (Array.isArray(item.customSections) && item.customSections.length > 0) {

@@ -109,7 +109,10 @@ connectDB().then(async () => {
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*', // Allow frontend to access
+  credentials: true
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Persistent image serving: serve from local disk cache, or fetch from MongoDB if container wiped
