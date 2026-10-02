@@ -76,11 +76,11 @@ connectDB().then(async () => {
     if (adminCount === 0) {
       await User.create({
         name: 'Radhika Menon',
-        email: 'admin@example.com',
-        password: 'Admin@12345',
+        email: 'admin@csp.com',
+        password: 'cspadmin@123',
         role: 'admin'
       });
-      console.log('?? Auto-created default admin user (admin@example.com / Admin@12345)');
+      console.log('🔑 Auto-created default admin user (admin@csp.com / cspadmin@123)');
     }
 
     // 2. Ensure default hero banners exist
