@@ -32,6 +32,19 @@ const normalizeProduct = (product, baseUrl) => {
   if (Array.isArray(p.images)) {
     p.images = p.images.map(img => normalizeImageUrl(img, baseUrl));
   }
+  if (Array.isArray(p.colorImages)) {
+    p.colorImages = p.colorImages.map(ci => ({
+      color: ci.color,
+      colorCode: ci.colorCode || '#0A305D',
+      images: Array.isArray(ci.images) ? ci.images.map(img => normalizeImageUrl(img, baseUrl)) : []
+    }));
+  }
+  if (Array.isArray(p.variants)) {
+    p.variants = p.variants.map(v => ({
+      ...v,
+      image: v.image ? normalizeImageUrl(v.image, baseUrl) : ''
+    }));
+  }
   return p;
 };
 
@@ -57,6 +70,10 @@ const createProduct = async (req, res) => {
       status,
       tags,
       color,
+      colors,
+      sizes,
+      variants,
+      colorImages,
       fabric,
       occasion,
       gender,
@@ -71,6 +88,57 @@ const createProduct = async (req, res) => {
       });
     }
 
+    // Format colors cleanly
+    const formattedColors = Array.isArray(colors)
+      ? colors.map(c => typeof c === 'string' ? { name: c.trim(), code: '#0A305D' } : { name: (c.name || '').trim(), code: c.code || '#0A305D' }).filter(c => c.name)
+      : (color ? [{ name: color.trim(), code: '#0A305D' }] : []);
+
+    // Format sizes cleanly
+    const formattedSizes = Array.isArray(sizes)
+      ? sizes.map(s => typeof s === 'string' ? s.trim() : String(s)).filter(Boolean)
+      : [];
+
+    // Format colorImages cleanly
+    const formattedColorImages = Array.isArray(colorImages)
+      ? colorImages.map(ci => ({
+          color: (ci.color || '').trim(),
+          colorCode: ci.colorCode || '#0A305D',
+          images: Array.isArray(ci.images) ? ci.images.filter(Boolean) : []
+        })).filter(ci => ci.color && ci.images.length > 0)
+      : [];
+
+    // Calculate total variant stock if variants provided
+    const hasVariants = Array.isArray(variants) && variants.length > 0;
+    const totalVariantStock = hasVariants
+      ? variants.reduce((sum, v) => sum + (parseInt(v.stockQuantity, 10) || 0), 0)
+      : (stockQuantity !== undefined ? Number(stockQuantity) : 10);
+
+    // Format variants
+    const formattedVariants = hasVariants
+      ? variants.map(v => ({
+          id: v.id || `var-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          color: (v.color || '').trim(),
+          colorCode: v.colorCode || '#0A305D',
+          size: (v.size || '').trim(),
+          stockQuantity: Math.max(0, parseInt(v.stockQuantity, 10) || 0),
+          sku: (v.sku || '').trim(),
+          inStock: (parseInt(v.stockQuantity, 10) || 0) > 0,
+          image: v.image || ''
+        }))
+      : [];
+
+    // Gather all image URLs from images, image, and colorImages
+    let allImages = Array.isArray(images) ? [...images] : (image ? [image] : []);
+    formattedColorImages.forEach(ci => {
+      ci.images.forEach(img => {
+        if (img && !allImages.includes(img)) {
+          allImages.push(img);
+        }
+      });
+    });
+
+    const primaryImage = image || (allImages.length > 0 ? allImages[0] : '');
+
     const product = new Product({
       name,
       sku: sku || `CSP-${Date.now().toString().slice(-6)}`,
@@ -81,13 +149,17 @@ const createProduct = async (req, res) => {
       category: category || 'General Sarees',
       categories: categories || (category ? [category] : ['Sarees']),
       description: description || '',
-      images: images && images.length > 0 ? images : (image ? [image] : []),
-      image: image || (images && images.length > 0 ? images[0] : ''),
-      inStock: inStock !== undefined ? Boolean(inStock) : true,
-      stockQuantity: stockQuantity !== undefined ? Number(stockQuantity) : 10,
+      images: allImages,
+      image: primaryImage,
+      inStock: totalVariantStock > 0,
+      stockQuantity: totalVariantStock,
       status: status || 'published',
       tags: tags || [],
-      color: color || '',
+      color: color || (formattedColors.length > 0 ? formattedColors[0].name : ''),
+      colors: formattedColors,
+      sizes: formattedSizes,
+      variants: formattedVariants,
+      colorImages: formattedColorImages,
       fabric: fabric || '',
       occasion: occasion || '',
       gender: gender || 'Women',
@@ -240,9 +312,88 @@ const getProductById = async (req, res) => {
 // @access  Public / Admin
 const updateProduct = async (req, res) => {
   try {
+    const updateData = { ...req.body };
+
+    // Format colors if provided
+    if (updateData.colors) {
+      updateData.colors = Array.isArray(updateData.colors)
+        ? updateData.colors.map(c => typeof c === 'string' ? { name: c.trim(), code: '#0A305D' } : { name: (c.name || '').trim(), code: c.code || '#0A305D' }).filter(c => c.name)
+        : [];
+      if (!updateData.color && updateData.colors.length > 0) {
+        updateData.color = updateData.colors[0].name;
+      }
+    }
+
+    // Format sizes if provided
+    if (updateData.sizes) {
+      updateData.sizes = Array.isArray(updateData.sizes)
+        ? updateData.sizes.map(s => typeof s === 'string' ? s.trim() : String(s)).filter(Boolean)
+        : [];
+    }
+
+    // Format colorImages if provided
+    if (updateData.colorImages) {
+      updateData.colorImages = Array.isArray(updateData.colorImages)
+        ? updateData.colorImages.map(ci => ({
+            color: (ci.color || '').trim(),
+            colorCode: ci.colorCode || '#0A305D',
+            images: Array.isArray(ci.images) ? ci.images.filter(Boolean) : []
+          })).filter(ci => ci.color && ci.images.length > 0)
+        : [];
+    }
+
+    // Format variants and sync stock if provided
+    if (Array.isArray(updateData.variants)) {
+      updateData.variants = updateData.variants.map(v => ({
+        id: v.id || `var-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        color: (v.color || '').trim(),
+        colorCode: v.colorCode || '#0A305D',
+        size: (v.size || '').trim(),
+        stockQuantity: Math.max(0, parseInt(v.stockQuantity, 10) || 0),
+        sku: (v.sku || '').trim(),
+        inStock: (parseInt(v.stockQuantity, 10) || 0) > 0,
+        image: v.image || ''
+      }));
+      const totalStock = updateData.variants.reduce((sum, v) => sum + (parseInt(v.stockQuantity, 10) || 0), 0);
+      updateData.stockQuantity = totalStock;
+      updateData.inStock = totalStock > 0;
+    }
+
+    // Consolidate images from colorImages into updateData.images if colorImages passed
+    if (Array.isArray(updateData.colorImages) && updateData.colorImages.length > 0) {
+      const allImgs = Array.isArray(updateData.images) ? [...updateData.images] : [];
+      updateData.colorImages.forEach(ci => {
+        ci.images.forEach(img => {
+          if (img && !allImgs.includes(img)) {
+            allImgs.push(img);
+          }
+        });
+      });
+      updateData.images = allImgs;
+      if (!updateData.image && allImgs.length > 0) {
+        updateData.image = allImgs[0];
+      }
+    }
+
+    // Clean localhost:5000 prefixes if any
+    if (updateData.image && typeof updateData.image === 'string' && updateData.image.startsWith('http://localhost:5000/uploads/')) {
+      updateData.image = updateData.image.replace('http://localhost:5000', '');
+    }
+    if (Array.isArray(updateData.images)) {
+      updateData.images = updateData.images.map(img => (typeof img === 'string' && img.startsWith('http://localhost:5000/uploads/') ? img.replace('http://localhost:5000', '') : img));
+    }
+    if (Array.isArray(updateData.colorImages)) {
+      updateData.colorImages = updateData.colorImages.map(ci => ({
+        ...ci,
+        images: Array.isArray(ci.images)
+          ? ci.images.map(img => (typeof img === 'string' && img.startsWith('http://localhost:5000/uploads/') ? img.replace('http://localhost:5000', '') : img))
+          : []
+      }));
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: updateData },
       { new: true, runValidators: true }
     );
 
@@ -365,4 +516,3 @@ module.exports = {
   updateProduct,
   deleteProduct
 };
-
