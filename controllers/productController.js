@@ -35,6 +35,17 @@ const normalizeProduct = (product, baseUrl) => {
   return p;
 };
 
+// Normalize gender input to ensure valid enum ('Women', 'Men', 'Kids', 'Unisex')
+const normalizeGender = (val) => {
+  if (!val || typeof val !== 'string') return 'Women';
+  const lower = val.trim().toLowerCase();
+  if (['men', 'male', 'man'].includes(lower)) return 'Men';
+  if (['women', 'female', 'woman'].includes(lower)) return 'Women';
+  if (['kids', 'kid', 'children', 'boys', 'girls', 'boy', 'girl'].includes(lower)) return 'Kids';
+  if (['unisex'].includes(lower)) return 'Unisex';
+  return val.trim();
+};
+
 // @desc    Create a new product
 // @route   POST /api/products
 // @access  Public / Admin
@@ -90,7 +101,7 @@ const createProduct = async (req, res) => {
       color: color || '',
       fabric: fabric || '',
       occasion: occasion || '',
-      gender: gender || 'Women',
+      gender: normalizeGender(gender),
       isNewProduct: Boolean(isNewProduct),
       isFeatured: Boolean(isFeatured)
     });
@@ -138,9 +149,7 @@ const getProducts = async (req, res) => {
 
     // Filter by gender
     if (gender && gender.toLowerCase() !== 'all') {
-      let genderVal = gender.trim();
-      if (genderVal.toLowerCase() === 'male') genderVal = 'Men';
-      if (genderVal.toLowerCase() === 'female') genderVal = 'Women';
+      const genderVal = normalizeGender(gender);
       query.gender = new RegExp(`^${genderVal}$`, 'i');
     }
 
@@ -240,6 +249,10 @@ const getProductById = async (req, res) => {
 // @access  Public / Admin
 const updateProduct = async (req, res) => {
   try {
+    if (req.body.gender) {
+      req.body.gender = normalizeGender(req.body.gender);
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
       { $set: req.body },
@@ -329,9 +342,7 @@ const getLatestProducts = async (req, res) => {
 
     // Filter by gender if provided
     if (gender && gender.toLowerCase() !== 'all') {
-      let genderVal = gender.trim();
-      if (genderVal.toLowerCase() === 'male') genderVal = 'Men';
-      if (genderVal.toLowerCase() === 'female') genderVal = 'Women';
+      const genderVal = normalizeGender(gender);
       query.gender = new RegExp(`^${genderVal}$`, 'i');
     }
 
