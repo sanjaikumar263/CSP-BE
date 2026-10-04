@@ -89,7 +89,8 @@ const createProduct = async (req, res) => {
       occasion,
       gender,
       isNewProduct,
-      isFeatured
+      isFeatured,
+      sizeChart
     } = req.body;
 
     if (!name || price === undefined) {
