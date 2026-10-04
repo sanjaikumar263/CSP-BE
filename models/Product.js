@@ -128,9 +128,18 @@ const productSchema = new mongoose.Schema(
     },
     gender: {
       type: String,
-      enum: ['Women', 'Men', 'Unisex'],
+      enum: ['Women', 'Men', 'Kids', 'Unisex'],
       default: 'Women',
-      trim: true
+      trim: true,
+      set: function (val) {
+        if (!val || typeof val !== 'string') return val;
+        const lower = val.trim().toLowerCase();
+        if (['men', 'male', 'man'].includes(lower)) return 'Men';
+        if (['women', 'female', 'woman'].includes(lower)) return 'Women';
+        if (['kids', 'kid', 'children', 'boys', 'girls', 'boy', 'girl'].includes(lower)) return 'Kids';
+        if (['unisex'].includes(lower)) return 'Unisex';
+        return val.trim();
+      }
     },
     isNewProduct: {
       type: Boolean,
