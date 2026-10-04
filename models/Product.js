@@ -139,6 +139,10 @@ const productSchema = new mongoose.Schema(
     isFeatured: {
       type: Boolean,
       default: false
+    },
+    sizeChart: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
     }
   },
   {

@@ -164,7 +164,8 @@ const createProduct = async (req, res) => {
       occasion: occasion || '',
       gender: gender || 'Women',
       isNewProduct: Boolean(isNewProduct),
-      isFeatured: Boolean(isFeatured)
+      isFeatured: Boolean(isFeatured),
+      sizeChart: sizeChart || null
     });
 
     const createdProduct = await product.save();
