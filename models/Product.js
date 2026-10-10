@@ -99,12 +99,21 @@ const productSchema = new mongoose.Schema(
         trim: true
       }
     ],
+    sizePrices: [
+      {
+        size: { type: String, trim: true },
+        price: { type: Number, default: 0 },
+        salePrice: { type: Number, default: null }
+      }
+    ],
     variants: [
       {
         id: { type: String },
         color: { type: String, trim: true },
         colorCode: { type: String, default: '#0A305D', trim: true },
         size: { type: String, trim: true },
+        price: { type: Number, default: null },
+        salePrice: { type: Number, default: null },
         stockQuantity: { type: Number, default: 0, min: 0 },
         sku: { type: String, trim: true },
         inStock: { type: Boolean, default: true },
