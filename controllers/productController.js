@@ -83,6 +83,7 @@ const createProduct = async (req, res) => {
       color,
       colors,
       sizes,
+      sizePrices,
       variants,
       colorImages,
       fabric,
@@ -125,18 +126,41 @@ const createProduct = async (req, res) => {
       ? variants.reduce((sum, v) => sum + (parseInt(v.stockQuantity, 10) || 0), 0)
       : (stockQuantity !== undefined ? Number(stockQuantity) : 10);
 
+    // Format sizePrices cleanly
+    const formattedSizePrices = Array.isArray(sizePrices)
+      ? sizePrices
+          .map(sp => ({
+            size: (sp.size || '').trim(),
+            price: sp.price !== undefined && sp.price !== null && sp.price !== '' ? Number(sp.price) : Number(price),
+            salePrice: sp.salePrice !== undefined && sp.salePrice !== null && sp.salePrice !== '' ? Number(sp.salePrice) : null
+          }))
+          .filter(sp => sp.size)
+      : [];
+
     // Format variants
     const formattedVariants = hasVariants
-      ? variants.map(v => ({
-          id: v.id || `var-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-          color: (v.color || '').trim(),
-          colorCode: v.colorCode || '#0A305D',
-          size: (v.size || '').trim(),
-          stockQuantity: Math.max(0, parseInt(v.stockQuantity, 10) || 0),
-          sku: (v.sku || '').trim(),
-          inStock: (parseInt(v.stockQuantity, 10) || 0) > 0,
-          image: v.image || ''
-        }))
+      ? variants.map(v => {
+          const matchingSizePrice = formattedSizePrices.find(sp => sp.size?.toLowerCase() === (v.size || '').trim().toLowerCase());
+          const varPrice = v.price !== undefined && v.price !== null && v.price !== ''
+            ? Number(v.price)
+            : (matchingSizePrice ? matchingSizePrice.price : Number(price));
+          const varSalePrice = v.salePrice !== undefined && v.salePrice !== null && v.salePrice !== ''
+            ? Number(v.salePrice)
+            : (matchingSizePrice ? matchingSizePrice.salePrice : (salePrice ? Number(salePrice) : null));
+
+          return {
+            id: v.id || `var-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            color: (v.color || '').trim(),
+            colorCode: v.colorCode || '#0A305D',
+            size: (v.size || '').trim(),
+            price: varPrice,
+            salePrice: varSalePrice,
+            stockQuantity: Math.max(0, parseInt(v.stockQuantity, 10) || 0),
+            sku: (v.sku || '').trim(),
+            inStock: (parseInt(v.stockQuantity, 10) || 0) > 0,
+            image: v.image || ''
+          };
+        })
       : [];
 
     // Gather all image URLs from images, image, and colorImages
@@ -170,6 +194,7 @@ const createProduct = async (req, res) => {
       color: color || (formattedColors.length > 0 ? formattedColors[0].name : ''),
       colors: formattedColors,
       sizes: formattedSizes,
+      sizePrices: formattedSizePrices,
       variants: formattedVariants,
       colorImages: formattedColorImages,
       fabric: fabric || '',
@@ -355,18 +380,44 @@ const updateProduct = async (req, res) => {
         : [];
     }
 
+    // Format sizePrices if provided
+    if (updateData.sizePrices !== undefined) {
+      updateData.sizePrices = Array.isArray(updateData.sizePrices)
+        ? updateData.sizePrices
+            .map(sp => ({
+              size: (sp.size || '').trim(),
+              price: sp.price !== undefined && sp.price !== null && sp.price !== '' ? Number(sp.price) : (updateData.price !== undefined ? Number(updateData.price) : 0),
+              salePrice: sp.salePrice !== undefined && sp.salePrice !== null && sp.salePrice !== '' ? Number(sp.salePrice) : null
+            }))
+            .filter(sp => sp.size)
+        : [];
+    }
+
     // Format variants and sync stock if provided
     if (Array.isArray(updateData.variants)) {
-      updateData.variants = updateData.variants.map(v => ({
-        id: v.id || `var-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-        color: (v.color || '').trim(),
-        colorCode: v.colorCode || '#0A305D',
-        size: (v.size || '').trim(),
-        stockQuantity: Math.max(0, parseInt(v.stockQuantity, 10) || 0),
-        sku: (v.sku || '').trim(),
-        inStock: (parseInt(v.stockQuantity, 10) || 0) > 0,
-        image: v.image || ''
-      }));
+      const sizePricesList = Array.isArray(updateData.sizePrices) ? updateData.sizePrices : [];
+      updateData.variants = updateData.variants.map(v => {
+        const matchingSizePrice = sizePricesList.find(sp => sp.size?.toLowerCase() === (v.size || '').trim().toLowerCase());
+        const varPrice = v.price !== undefined && v.price !== null && v.price !== ''
+          ? Number(v.price)
+          : (matchingSizePrice ? matchingSizePrice.price : (updateData.price !== undefined ? Number(updateData.price) : null));
+        const varSalePrice = v.salePrice !== undefined && v.salePrice !== null && v.salePrice !== ''
+          ? Number(v.salePrice)
+          : (matchingSizePrice ? matchingSizePrice.salePrice : (updateData.salePrice !== undefined ? Number(updateData.salePrice) : null));
+
+        return {
+          id: v.id || `var-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          color: (v.color || '').trim(),
+          colorCode: v.colorCode || '#0A305D',
+          size: (v.size || '').trim(),
+          price: varPrice,
+          salePrice: varSalePrice,
+          stockQuantity: Math.max(0, parseInt(v.stockQuantity, 10) || 0),
+          sku: (v.sku || '').trim(),
+          inStock: (parseInt(v.stockQuantity, 10) || 0) > 0,
+          image: v.image || ''
+        };
+      });
       const totalStock = updateData.variants.reduce((sum, v) => sum + (parseInt(v.stockQuantity, 10) || 0), 0);
       updateData.stockQuantity = totalStock;
       updateData.inStock = totalStock > 0;
